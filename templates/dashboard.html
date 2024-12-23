@@ -1,0 +1,235 @@
+<!-- templates/dashboard.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Management Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .client-card {
+            margin-bottom: 20px;
+        }
+        .command-history {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-dark bg-dark">
+        <div class="container">
+            <span class="navbar-brand">Network Management Dashboard</span>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <!-- Client List -->
+            <div class="col-md-8">
+                <h2>Connected Clients</h2>
+                <div id="client-list" class="row"></div>
+            </div>
+
+            <!-- Command Interface -->
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Send Command</h3>
+                    </div>
+                    <div class="card-body">
+                        <form id="command-form">
+                            <div class="mb-3">
+                                <label for="client-select" class="form-label">Select Client</label>
+                                <select class="form-select" id="client-select" required>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="command-select" class="form-label">Select Command</label>
+                                <select class="form-select" id="command-select" required>
+                                    <option value="">Choose a command...</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <p class="command-description text-muted" id="command-description"></p>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Send Command</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Command History -->
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h3>Command History</h3>
+                    </div>
+                    <div class="card-body command-history" id="command-history">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Update client list
+        function updateClients() {
+            fetch('/clients')
+                .then(response => response.json())
+                .then(clients => {
+                    const clientList = document.getElementById('client-list');
+                    const clientSelect = document.getElementById('client-select');
+                    
+                    clientList.innerHTML = '';
+                    clientSelect.innerHTML = '<option value="">Select a client</option>';
+                    
+                    for (const [clientId, clientData] of Object.entries(clients)) {
+                        // Add to client list
+                        const card = document.createElement('div');
+                        card.className = 'col-md-6 client-card';
+                        card.innerHTML = `
+                            <div class="card">
+                                <div class="card-body">
+                                    <h5 class="card-title">${clientData.hostname}</h5>
+                                    <p class="card-text">
+                                        OS: ${clientData.os}<br>
+                                        IP: ${clientData.ip}<br>
+                                        Last Seen: ${new Date(clientData.last_seen).toLocaleString()}
+                                    </p>
+                                </div>
+                            </div>
+                        `;
+                        clientList.appendChild(card);
+
+                        // Add to select dropdown
+                        const option = document.createElement('option');
+                        option.value = clientId;
+                        option.textContent = clientData.hostname;
+                        clientSelect.appendChild(option);
+                    }
+                });
+        }
+
+        // Update command history
+        function updateCommandHistory() {
+            fetch('/results')
+                .then(response => response.json())
+                .then(results => {
+                    const history = document.getElementById('command-history');
+                    history.innerHTML = '';
+                    
+                    for (const [commandId, resultData] of Object.entries(results)) {
+                        const result = document.createElement('div');
+                        result.className = 'mb-3';
+                        result.innerHTML = `
+                            <small class="text-muted">${new Date(resultData.timestamp).toLocaleString()}</small>
+                            <pre class="mt-1 mb-0"><code>${resultData.output}</code></pre>
+                            <hr>
+                        `;
+                        history.appendChild(result);
+                    }
+                });
+        }
+
+        // Handle command submission
+        document.getElementById('command-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const clientId = document.getElementById('client-select').value;
+            const command = document.getElementById('command-input').value;
+            
+            fetch('/command', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    client_id: clientId,
+                    command: command
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('command-input').value = '';
+                alert('Command sent successfully!');
+            })
+            .catch(error => {
+                alert('Error sending command: ' + error);
+            });
+        });
+
+        // Load available commands
+        function loadAvailableCommands() {
+            fetch('/available-commands')
+                .then(response => response.json())
+                .then(commands => {
+                    const commandSelect = document.getElementById('command-select');
+                    commandSelect.innerHTML = '<option value="">Choose a command...</option>';
+                    
+                    for (const [commandType, commandData] of Object.entries(commands)) {
+                        const option = document.createElement('option');
+                        option.value = commandType;
+                        option.textContent = commandData.name;
+                        commandSelect.appendChild(option);
+                    }
+                });
+        }
+
+        // Update command description when selected
+        document.getElementById('command-select').addEventListener('change', function(e) {
+            const commandType = e.target.value;
+            if (commandType) {
+                fetch('/available-commands')
+                    .then(response => response.json())
+                    .then(commands => {
+                        const description = commands[commandType].description;
+                        document.getElementById('command-description').textContent = description;
+                    });
+            } else {
+                document.getElementById('command-description').textContent = '';
+            }
+        });
+
+        // Handle command submission
+        document.getElementById('command-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const clientId = document.getElementById('client-select').value;
+            const commandType = document.getElementById('command-select').value;
+            
+            if (!clientId || !commandType) {
+                alert('Please select both client and command');
+                return;
+            }
+            
+            fetch('/command', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    client_id: clientId,
+                    command_type: commandType
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('command-select').value = '';
+                document.getElementById('command-description').textContent = '';
+                alert('Command sent successfully!');
+            })
+            .catch(error => {
+                alert('Error sending command: ' + error);
+            });
+        });
+
+        // Update data periodically
+        setInterval(updateClients, 5000);
+        setInterval(updateCommandHistory, 5000);
+
+        // Initial updates
+        loadAvailableCommands();
+        updateClients();
+        updateCommandHistory();
+    </script>
+</body>
+</html>
