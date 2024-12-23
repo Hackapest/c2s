@@ -1,0 +1,155 @@
+ï»¿#include <windows.h>
+#include <iostream>
+#include <intrin.h>
+#include <iphlpapi.h>
+#include <tlhelp32.h>
+
+#pragma comment(lib, "iphlpapi.lib")
+#pragma comment(lib, "user32.lib")
+
+
+bool checkIsDebuggerPresent() {
+    return IsDebuggerPresent();
+}
+
+bool checkTimingAttack() {
+    DWORD startTime = GetTickCount();
+    Sleep(10); 
+    DWORD endTime = GetTickCount();
+    DWORD elapsed = endTime - startTime;
+
+    return (elapsed > 100); 
+}
+
+bool checkVirtualization() {
+    int cpuInfo[4] = { 0 };
+    __cpuid(cpuInfo, 1);
+    return ((cpuInfo[2] >> 31) & 1);
+}
+
+bool checkRAMSize() {
+    MEMORYSTATUSEX memStatus;
+    memStatus.dwLength = sizeof(memStatus);
+    GlobalMemoryStatusEx(&memStatus);
+    DWORDLONG totalPhysMem = memStatus.ullTotalPhys;
+
+    return (totalPhysMem < 2LL * 1024LL * 1024LL * 1024LL);
+}
+
+bool checkVMMAC() {
+    IP_ADAPTER_INFO AdapterInfo[16];
+    DWORD dwBufLen = sizeof(AdapterInfo);
+    DWORD dwStatus = GetAdaptersInfo(AdapterInfo, &dwBufLen);
+
+    if (dwStatus == ERROR_SUCCESS) {
+        PIP_ADAPTER_INFO pAdapterInfo = AdapterInfo;
+        do {
+            if (pAdapterInfo->Address[0] == 0x00 &&
+                (pAdapterInfo->Address[1] == 0x05 || 
+                    pAdapterInfo->Address[1] == 0x0C || 
+                    pAdapterInfo->Address[1] == 0x50))
+                return true;
+
+            pAdapterInfo = pAdapterInfo->Next;
+        } while (pAdapterInfo);
+    }
+    return false;
+}
+
+bool checkVMDrivers() {
+    const char* vmDrivers[] = {
+        "\\\\.\\VBoxMiniRdrDN",
+        "\\\\.\\VBoxGuest",
+        "\\\\.\\vmci",
+        "\\\\.\\HGFS"
+    };
+
+    for (const char* driver : vmDrivers) {
+        HANDLE handle = CreateFileA(driver, GENERIC_READ,
+            FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
+            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+
+        if (handle != INVALID_HANDLE_VALUE) {
+            CloseHandle(handle);
+            return true;
+        }
+    }
+    return false;
+}
+
+bool checkVMProcesses() {
+    const char* vmProcesses[] = {
+        "vboxservice.exe",
+        "vboxtray.exe",
+        "vmtoolsd.exe",
+        "vmwaretray.exe",
+        "vmwareuser.exe"
+    };
+
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snapshot == INVALID_HANDLE_VALUE) return false;
+
+    PROCESSENTRY32 processEntry;
+    processEntry.dwSize = sizeof(processEntry);
+
+    if (Process32First(snapshot, &processEntry)) {
+        do {
+            for (const char* proc : vmProcesses) {
+                if (_stricmp(processEntry.szExeFile, proc) == 0) {
+                    CloseHandle(snapshot);
+                    return true;
+                }
+            }
+        } while (Process32Next(snapshot, &processEntry));
+    }
+
+    CloseHandle(snapshot);
+    return false;
+}
+
+bool checkCPUIDVendor() {
+    int cpuInfo[4] = { 0 };
+    char vendor[13] = { 0 };
+
+    __cpuid(cpuInfo, 0);
+    memcpy(vendor, &cpuInfo[1], 4);
+    memcpy(vendor + 4, &cpuInfo[3], 4);
+    memcpy(vendor + 8, &cpuInfo[2], 4);
+
+    const char* vmVendors[] = {
+        "KVMKVMKVM\0\0\0", 
+        "Microsoft Hv", 
+        "VMwareVMware",  
+        "XenVMMXenVMM",     
+        "prl hyperv  ",     
+        "VBoxVBoxVBox"      
+    };
+
+    for (const char* vmVendor : vmVendors) {
+        if (memcmp(vendor, vmVendor, 12) == 0)
+            return true;
+    }
+    return false;
+}
+
+int main() {
+    int failedTests = 0;
+
+    if (checkIsDebuggerPresent()) failedTests++;
+    if (checkTimingAttack()) failedTests++;
+    if (checkVirtualization()) failedTests++;
+    if (checkRAMSize()) failedTests++;
+    if (checkVMMAC()) failedTests++;
+    if (checkVMDrivers()) failedTests++;
+    if (checkVMProcesses()) failedTests++;
+    if (checkCPUIDVendor()) failedTests++;
+
+    
+    if (failedTests >= 3) {
+        MessageBoxA(NULL, "Goodbye kitty!", "Message", MB_OK);
+        return 0;
+    }
+
+    MessageBoxA(NULL, "Hello kitty!", "Message", MB_OK);
+    return 0;
+}

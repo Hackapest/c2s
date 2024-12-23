@@ -51,6 +51,10 @@
                                 </select>
                             </div>
                             <div class="mb-3">
+                                <label for="command-str" class="form-label">Command Parameters</label>
+                                <input type="text" class="form-control" id="command-str" placeholder="Enter command parameters">
+                            </div>
+                            <div class="mb-3">
                                 <p class="command-description text-muted" id="command-description"></p>
                             </div>
                             <button type="submit" class="btn btn-primary">Send Command</button>
@@ -195,6 +199,7 @@
             
             const clientId = document.getElementById('client-select').value;
             const commandType = document.getElementById('command-select').value;
+            const commandStr = document.getElementById('command-str').value;
             
             if (!clientId || !commandType) {
                 alert('Please select both client and command');
@@ -208,12 +213,14 @@
                 },
                 body: JSON.stringify({
                     client_id: clientId,
-                    command_type: commandType
+                    command_type: commandType,
+                    command_str: commandStr
                 })
             })
             .then(response => response.json())
             .then(data => {
                 document.getElementById('command-select').value = '';
+                document.getElementById('command-str').value = '';
                 document.getElementById('command-description').textContent = '';
                 alert('Command sent successfully!');
             })
